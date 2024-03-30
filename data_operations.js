@@ -1,8 +1,112 @@
 const dfd = require("danfojs-node");
 
+// standardize
+// normalize
+// calculate_delta
+// calculate_percentage_change
+// percent_of_total
+// logarithmic_scaling
+// square_root_transform
 // rolling_average
 // rolling_median
 // discretize_column
+
+async function standardize(df) {
+    let scaler = new dfd.StandardScaler()
+    scaler.fit(df)
+    let df_enc = scaler.transform(df)
+    return df_enc
+}
+
+/**
+ * Normalizes the single column in the DataFrame to the range 0-1
+ * @param {DataFrame} df
+ * @returns The DataFrame with the normalized column
+ */
+async function normalize(df) {
+    let scaler = new dfd.MinMaxScaler()
+    scaler.fit(df)
+    let df_enc = scaler.transform(df)
+    return df_enc
+}
+
+/**
+ * Calculates the difference between each element and the previous element
+ * @param {DataFrame} df
+ * @returns The DataFrame with the delta column
+ */
+async function calculateDelta(df) {
+    const column = df.columns[0];
+    const values = df[column].values;
+    let deltaValues = new Array(values.length);
+    deltaValues[0] = 0;
+    for (let i = 1; i < values.length; i++) {
+        deltaValues[i] = values[i] - values[i - 1];
+    }
+    return new dfd.DataFrame({ [column]: deltaValues });
+}
+
+/**
+ * Calculates the percentage change between each element and the previous element
+ * @param {DataFrame} df
+ * @returns The DataFrame with the percentage change column
+ */
+async function calculatePercentageChange(df) {
+    const column = df.columns[0];
+    const values = df[column].values;
+    let pctChangeValues = new Array(values.length);
+    pctChangeValues[0] = 0;
+    for (let i = 1; i < values.length; i++) {
+        if (values[i - 1] !== 0) {
+            pctChangeValues[i] = ((values[i] - values[i - 1]) / values[i - 1]) * 100;
+        } else { // division by 0
+            pctChangeValues[i] = NaN;
+        }
+    }
+    return new dfd.DataFrame({ [column]: pctChangeValues });
+}
+
+/**
+ * Calculates the percentage of each element to the sum of the single column
+ * @param {DataFrame} df
+ * @returns The DataFrame with the percent of total column
+ */
+async function percentOfTotal(df) {
+    const column = df.columns[0];
+    const colSeries = df[column];
+    const totalSum = await colSeries.sum();
+    const percentOfTotalColumn = colSeries.div(totalSum).mul(100);
+    const newDataFrame = new dfd.DataFrame({ [column]: percentOfTotalColumn.values });
+    return newDataFrame
+}
+
+/**
+ * Applies logarithmic scaling
+ * @param {DataFrame} df
+ * @returns The DataFrame with the logarithmically scaled column
+ */
+async function logarithmicScaling(df) {
+    const column = df.columns[0];
+    const values = df[column].values;
+    const logScaledValues = values.map(value => Math.log(value));
+    const newDataFrame = new dfd.DataFrame({ [column]: logScaledValues });
+    return newDataFrame;
+}
+
+
+/**
+ * Applies square root transformation
+ * @param {DataFrame} df
+ * @returns The DataFrame with the square root transformed column
+ */
+
+async function squareRootTransform(df) {
+    const column = df.columns[0];
+    const values = df[column].values;
+    const sqrtTransformedValues = values.map(value => Math.sqrt(value));
+    const newDataFrame = new dfd.DataFrame({ [column]: sqrtTransformedValues });
+    return newDataFrame;
+}
 
 /**
  * Calculates the moving average over a specified window of rows for each column
@@ -15,7 +119,7 @@ async function rollingAverage(df, windowSize){
     const calculateMovingAverage = (values, windowSize) => {
         let movingAverages = [];
         for (let i = 0; i < values.length; i++) {
-            if (i + 1 < windowSize) {
+            if (i + 1 < windowSize) { // so that the first rows have values
                 let windowValues = values.slice(0, i + 1);
                 let sum = windowValues.reduce((a, b) => a + b, 0);
                 movingAverages.push(sum / (i + 1));
@@ -29,9 +133,10 @@ async function rollingAverage(df, windowSize){
     };
     for (let column of df.columns) {
         let columnData = df[column].values;
-        if (typeof columnData[0] === 'number') {
+        if (typeof columnData[0] === 'number') { // Apply only to numeric columns
             results[column] = calculateMovingAverage(columnData, windowSize);
         } else {
+            // Copy non-numeric columns as is
             results[column] = columnData.slice();
         }
     }
@@ -45,18 +150,22 @@ async function rollingAverage(df, windowSize){
  */
 async function rollingMedian(df, windowSize){
     let results = {};
+
+    // Internal function to calculate the median of an array
     const calculateMedian = (values) => {
         values.sort((a, b) => a - b);
         const mid = Math.floor(values.length / 2);
         return values.length % 2 !== 0 ? values[mid] : (values[mid - 1] + values[mid]) / 2.0;
     };
+
+    // Manually calculate the rolling median for each numeric column
     for (let column of df.columns) {
         let columnData = df[column].values;
-        if (typeof columnData[0] === 'number') {
+        if (typeof columnData[0] === 'number') { // Apply only to numeric columns
             let medians = [];
             for (let i = 0; i < columnData.length; i++) {
                 if (i + 1 < windowSize) {
-                    medians.push(NaN);
+                    medians.push(NaN); // Not enough data to fill the window
                 } else {
                     let windowValues = columnData.slice(i + 1 - windowSize, i + 1);
                     medians.push(calculateMedian(windowValues));
@@ -90,3 +199,17 @@ async function discretizeColumn(df, numBins){
     df.addColumn("Binned Data", binnedData, { inplace: true });
     return df;
 }
+
+// Export the functions
+module.exports = {
+    standardize,
+    normalize,
+    calculateDelta,
+    calculatePercentageChange,
+    percentOfTotal,
+    logarithmicScaling,
+    squareRootTransform,
+    rollingAverage,
+    rollingMedian,
+    discretizeColumn
+};
